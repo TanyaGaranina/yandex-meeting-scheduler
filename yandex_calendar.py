@@ -13,7 +13,6 @@ from zoneinfo import ZoneInfo
 import caldav
 import icalendar
 import requests
-import vobject
 
 
 ENV_PATHS = [
@@ -26,7 +25,6 @@ WORK_CALENDAR_PATH = Path(__file__).with_name("work_calendar.json")
 CALENDAR_SETTINGS_PATH = Path(__file__).with_name("calendar_settings.json")
 DEFAULT_ROOM_SIGNAL_WORDS = ("перег", "комната", "meeting", "room", "бронь")
 YANDEX_360_API_BASE = "https://api360.yandex.net/directory/v1"
-YANDEX_CARDDAV_URL = "https://carddav.yandex.ru"
 
 
 def load_env_file(env_path: Path) -> bool:
@@ -124,171 +122,6 @@ def yandex_360_headers() -> dict[str, str]:
             "then add the OAuth token."
         )
     return {"Authorization": f"OAuth {token}"}
-
-
-def carddav_credentials() -> tuple[str, str] | None:
-    login = optional_env("YANDEX_CARDDAV_LOGIN") or optional_env("YANDEX_LOGIN")
-    password = optional_env("YANDEX_CARDDAV_APP_PASSWORD")
-    if not login or not password:
-        return None
-    return login, password
-
-
-def carddav_request(
-    method: str,
-    url: str,
-    body: str | None = None,
-    depth: str | None = None,
-) -> requests.Response:
-    credentials = carddav_credentials()
-    if not credentials:
-        raise RuntimeError("CardDAV credentials are not configured.")
-    headers = {}
-    if body:
-        headers["Content-Type"] = "application/xml; charset=utf-8"
-    if depth is not None:
-        headers["Depth"] = depth
-    response = requests.request(
-        method,
-        url,
-        auth=credentials,
-        data=body.encode("utf-8") if body else None,
-        headers=headers or None,
-        timeout=30,
-    )
-    if response.status_code >= 400:
-        raise RuntimeError(f"CardDAV request failed: HTTP {response.status_code} {response.text}")
-    return response
-
-
-def discover_carddav_addressbook_urls() -> list[str]:
-    principal_body = """<?xml version="1.0" encoding="utf-8" ?>
-<d:propfind xmlns:d="DAV:">
-  <d:prop>
-    <d:current-user-principal />
-  </d:prop>
-</d:propfind>
-"""
-    principal_response = carddav_request("PROPFIND", YANDEX_CARDDAV_URL, principal_body, depth="0")
-    root = ET.fromstring(principal_response.text)
-    namespaces = {"d": "DAV:", "card": "urn:ietf:params:xml:ns:carddav"}
-    principal_href = root.find(".//d:current-user-principal/d:href", namespaces)
-    principal_url = (
-        f"https://carddav.yandex.ru{principal_href.text}"
-        if principal_href is not None and principal_href.text and not principal_href.text.startswith("http")
-        else principal_href.text if principal_href is not None else YANDEX_CARDDAV_URL
-    )
-
-    home_body = """<?xml version="1.0" encoding="utf-8" ?>
-<d:propfind xmlns:d="DAV:" xmlns:card="urn:ietf:params:xml:ns:carddav">
-  <d:prop>
-    <card:addressbook-home-set />
-  </d:prop>
-</d:propfind>
-"""
-    home_response = carddav_request("PROPFIND", principal_url, home_body, depth="0")
-    root = ET.fromstring(home_response.text)
-    home_href = root.find(".//card:addressbook-home-set/d:href", namespaces)
-    home_url = (
-        f"https://carddav.yandex.ru{home_href.text}"
-        if home_href is not None and home_href.text and not home_href.text.startswith("http")
-        else home_href.text if home_href is not None else YANDEX_CARDDAV_URL
-    )
-
-    body = """<?xml version="1.0" encoding="utf-8" ?>
-<d:propfind xmlns:d="DAV:" xmlns:card="urn:ietf:params:xml:ns:carddav">
-  <d:prop>
-    <d:resourcetype />
-  </d:prop>
-</d:propfind>
-"""
-    response = carddav_request("PROPFIND", home_url, body, depth="1")
-    root = ET.fromstring(response.text)
-    urls = []
-    for item in root.findall(".//d:response", namespaces):
-        href = item.find("d:href", namespaces)
-        resource_type = item.find(".//d:resourcetype", namespaces)
-        if href is None or resource_type is None:
-            continue
-        if resource_type.find("card:addressbook", namespaces) is not None:
-            urls.append(href.text or "")
-    return [url if url.startswith("http") else f"https://carddav.yandex.ru{url}" for url in urls]
-
-
-def iter_carddav_vcards() -> Iterable[str]:
-    body = """<?xml version="1.0" encoding="utf-8" ?>
-<card:addressbook-query xmlns:d="DAV:" xmlns:card="urn:ietf:params:xml:ns:carddav">
-  <d:prop>
-    <card:address-data />
-  </d:prop>
-</card:addressbook-query>
-"""
-    propfind_body = """<?xml version="1.0" encoding="utf-8" ?>
-<d:propfind xmlns:d="DAV:">
-  <d:prop>
-    <d:getetag />
-  </d:prop>
-</d:propfind>
-"""
-    namespaces = {"d": "DAV:", "card": "urn:ietf:params:xml:ns:carddav"}
-
-    for url in discover_carddav_addressbook_urls():
-        try:
-            response = carddav_request("REPORT", url, body, depth="1")
-            root = ET.fromstring(response.text)
-            for address_data in root.findall(".//card:address-data", namespaces):
-                if address_data.text:
-                    yield address_data.text
-            continue
-        except RuntimeError:
-            pass
-
-        response = carddav_request("PROPFIND", url, propfind_body, depth="1")
-        root = ET.fromstring(response.text)
-        for item in root.findall(".//d:response", namespaces):
-            href = item.find("d:href", namespaces)
-            if href is None or not href.text or not href.text.lower().endswith(".vcf"):
-                continue
-            card_url = href.text if href.text.startswith("http") else f"https://carddav.yandex.ru{href.text}"
-            card_response = carddav_request("GET", card_url)
-            if card_response.text:
-                yield card_response.text
-
-
-def vcard_to_contact(card_text: str) -> dict[str, str] | None:
-    try:
-        card = vobject.readOne(card_text)
-    except Exception:
-        return None
-    email = None
-    emails = getattr(card, "email_list", [])
-    if emails:
-        email = str(emails[0].value).lower()
-    if not email:
-        return None
-    name = str(getattr(getattr(card, "fn", None), "value", "") or email)
-    return {"name": name, "email": email}
-
-
-def find_carddav_contact(query: str) -> dict[str, str] | None:
-    if not carddav_credentials():
-        return None
-    normalized_query = normalize_lookup_text(query)
-    query_tokens = normalized_query.split()
-    matches = []
-    for card_text in iter_carddav_vcards():
-        contact = vcard_to_contact(card_text)
-        if not contact:
-            continue
-        search_text = normalize_lookup_text(f"{contact['name']} {contact['email']}")
-        if all(token in search_text for token in query_tokens):
-            matches.append(contact)
-    if not matches:
-        return None
-    if len(matches) > 1:
-        options = ", ".join(f"{item['name']} <{item['email']}>" for item in matches[:10])
-        raise SystemExit(f"CardDAV contact lookup is ambiguous for '{query}'. Matches: {options}")
-    return matches[0]
 
 
 def yandex_360_get(path: str, params: dict[str, str | int] | None = None) -> dict:
@@ -427,11 +260,14 @@ def resolve_attendees(names: list[str] | None) -> list[dict[str, str]]:
             missing.append(name.strip())
 
     for name in missing:
-        carddav_contact = find_carddav_contact(name)
-        if carddav_contact:
-            resolved.append(carddav_contact)
-        else:
+        if optional_env("YANDEX_360_OAUTH_TOKEN"):
             resolved.append(find_yandex_360_contact(name))
+        else:
+            raise SystemExit(
+                f"Contact was not found in contacts.json: {name}. "
+                "Add an alias to contacts.json, pass a direct email, "
+                "or configure YANDEX_360_OAUTH_TOKEN for Directory lookup."
+            )
 
     unique: dict[str, dict[str, str]] = {}
     for attendee in resolved:
