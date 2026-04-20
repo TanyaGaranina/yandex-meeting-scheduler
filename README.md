@@ -63,25 +63,9 @@ python .\calendar\yandex_calendar.py calendars
 - [Синхронизация Яндекс Календаря с календарём на компьютере](https://yandex.com/support/yandex-360/business/calendar/en/sync/sync-desktop)
 - [Синхронизация Яндекс Календаря с мобильным календарём](https://yandex.com/support/yandex-360/customers/calendar/web/en/sync/sync-mobile)
 
-### 3. Опционально: создать пароль приложения для контактов
+### 3. Опционально: создать OAuth-приложение для Yandex 360 Directory
 
-Это нужно только если вы хотите, чтобы инструмент пытался искать участников через CardDAV-контакты, когда их нет в `contacts.json`.
-
-1. Снова откройте [id.yandex.ru/security](https://id.yandex.ru/security).
-2. Перейдите в `Доступ к вашим данным` -> `Пароли приложений`.
-3. Создайте новый пароль приложения.
-4. Выберите тип `CardDAV-клиент для синхронизации контактов`.
-5. Назовите пароль, например `yandex-meeting-scheduler contacts`.
-6. Скопируйте пароль и добавьте в `.env`:
-
-```env
-YANDEX_CARDDAV_LOGIN=your-login@example.com
-YANDEX_CARDDAV_APP_PASSWORD=your-contacts-app-password
-```
-
-### 4. Опционально: создать OAuth-приложение для Yandex 360 Directory
-
-Это нужно только если в вашей организации доступен Yandex 360 Directory API и вы хотите искать сотрудников в корпоративной директории, когда участника нет ни в `contacts.json`, ни в CardDAV.
+Это нужно только если в вашей организации доступен Yandex 360 Directory API и вы хотите искать сотрудников в корпоративной директории, когда участника нет в `contacts.json`.
 
 1. Откройте консоль Yandex OAuth: [oauth.yandex.com](https://oauth.yandex.com/).
 2. Создайте приложение по ссылке: [oauth.yandex.com/client/new/](https://oauth.yandex.com/client/new/).
@@ -168,11 +152,9 @@ Copy-Item .\calendar\contacts.example.json .\calendar\contacts.json
 
 Переговорки лежат в `rooms.json`, а порядок выбора и маленькие комнаты - в `calendar_settings.json`.
 
-Опционально для поиска контактов:
+Опционально для поиска сотрудников в Yandex 360 Directory:
 
 ```env
-YANDEX_CARDDAV_LOGIN=
-YANDEX_CARDDAV_APP_PASSWORD=
 YANDEX_360_OAUTH_TOKEN=
 YANDEX_360_ORG_ID=
 ```
@@ -244,6 +226,6 @@ python .\calendar\yandex_calendar.py delete --title "Тестовая встре
 ## Ограничения
 
 - Инструмент не хранит пароли и токены в коде. Все секреты должны лежать только в локальном `.env`.
-- Для участников лучше заранее заполнить `contacts.json`, если корпоративная адресная книга недоступна через CardDAV.
+- Для участников лучше заранее заполнить `contacts.json`, если Yandex 360 Directory API недоступен или не настроен.
 - Обновление recurring-встреч пока заблокировано специально, чтобы случайно не изменить всю серию.
 - Доступность участников и переговорок зависит от того, какие free-busy данные возвращает ваш Яндекс 360.
