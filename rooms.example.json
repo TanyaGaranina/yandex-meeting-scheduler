@@ -1,0 +1,15 @@
+{
+  "main-room": {
+    "name": "Main Room",
+    "email": "main-room@example.com"
+  },
+  "focus-room": {
+    "name": "Focus Room",
+    "email": "focus-room@example.com"
+  },
+  "small-room": {
+    "name": "Small Room",
+    "email": "small-room@example.com"
+  }
+}
+
