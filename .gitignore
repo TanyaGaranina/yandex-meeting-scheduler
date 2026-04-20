@@ -1,0 +1,11 @@
+.env
+**/.env
+!.env.example
+!**/.env.example
+contacts.json
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.log
+.DS_Store
+Thumbs.db
