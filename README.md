@@ -185,6 +185,12 @@ python .\calendar\yandex_calendar.py create --title "Демо" --start 2026-04-2
 python .\calendar\yandex_calendar.py create --title "Демо" --start 2026-04-22T14:00 --end 2026-04-22T15:00 --calendar "Мои события" --no-room
 ```
 
+Проверить сборку события без подключения к Яндексу:
+
+```powershell
+python .\calendar\yandex_calendar.py create --title "Smoke test" --start 2026-04-22T14:00 --end 2026-04-22T14:30 --no-room --dry-run
+```
+
 Подобрать слот:
 
 ```powershell
