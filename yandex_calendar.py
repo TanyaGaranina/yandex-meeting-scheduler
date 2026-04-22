@@ -109,6 +109,18 @@ def room_signal_words() -> tuple[str, ...]:
     return tuple(normalize_lookup_text(value) for value in words)
 
 
+def default_calendar_name() -> str | None:
+    settings = load_calendar_settings()
+    value = settings.get("default_calendar")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def calendar_arg(value: str | None) -> str | None:
+    return value or default_calendar_name()
+
+
 def normalize_lookup_text(value: str) -> str:
     return " ".join(value.lower().replace("ё", "е").split())
 
@@ -738,7 +750,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     create_parser.add_argument(
         "--calendar",
-        help="Calendar name to create the event in. Uses the first available calendar if omitted.",
+        help="Calendar name to create the event in. Defaults to default_calendar from calendar_settings.json.",
     )
     create_parser.add_argument("--description", help="Optional event description.")
     create_parser.add_argument("--location", help="Optional event location.")
@@ -797,8 +809,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     suggest_parser.add_argument(
         "--calendar",
-        default="Мои события",
-        help="Organizer calendar to check for conflicts. Defaults to 'Мои события'.",
+        help="Organizer calendar to check for conflicts. Defaults to default_calendar from calendar_settings.json.",
     )
     suggest_parser.add_argument(
         "--limit",
@@ -821,7 +832,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     delete_parser.add_argument(
         "--calendar",
-        help="Calendar name to delete from. Searches all calendars if omitted.",
+        help="Calendar name to delete from. Defaults to default_calendar from calendar_settings.json.",
     )
 
     update_parser = subparsers.add_parser(
@@ -837,7 +848,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     update_parser.add_argument(
         "--calendar",
-        help="Calendar name to search. Searches all calendars if omitted.",
+        help="Calendar name to search. Defaults to default_calendar from calendar_settings.json.",
     )
     update_parser.add_argument(
         "--match-index",
@@ -909,7 +920,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     contacts_parser.add_argument(
         "--calendar",
-        help="Calendar name to analyze. Searches all calendars if omitted.",
+        help="Calendar name to analyze. Defaults to default_calendar from calendar_settings.json.",
     )
     contacts_parser.add_argument(
         "--limit",
@@ -932,7 +943,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rooms_parser.add_argument(
         "--calendar",
-        help="Calendar name to analyze. Searches all calendars if omitted.",
+        help="Calendar name to analyze. Defaults to default_calendar from calendar_settings.json.",
     )
     rooms_parser.add_argument(
         "--limit",
@@ -971,7 +982,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     inspect_parser.add_argument(
         "--calendar",
-        help="Calendar name to inspect. Searches all calendars if omitted.",
+        help="Calendar name to inspect. Defaults to default_calendar from calendar_settings.json.",
     )
     inspect_parser.add_argument(
         "--limit",
@@ -1722,6 +1733,7 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     tz = get_timezone()
+    selected_calendar = calendar_arg(getattr(args, "calendar", None))
 
     if dry_run_create_without_caldav(args, tz):
         return
@@ -1762,7 +1774,7 @@ def main() -> None:
                         + ", ".join(room_priority())
                         + ". Use --no-room to create without a room."
                     )
-            calendar = get_calendar(principal, args.calendar)
+            calendar = get_calendar(principal, selected_calendar)
             organizer = organizer_from_env()
             event_payload = build_ics(
                 title=args.title,
@@ -1826,7 +1838,7 @@ def main() -> None:
                 from_date=from_date,
                 to_date=to_date,
                 explicit_dates=explicit_dates,
-                calendar_name=args.calendar,
+                calendar_name=selected_calendar,
                 limit=args.limit,
                 require_room=args.require_room,
             )
@@ -1841,7 +1853,7 @@ def main() -> None:
                 title=args.title,
                 query=args.query,
                 target_date=target_date,
-                calendar_name=args.calendar,
+                calendar_name=selected_calendar,
                 match_index=args.match_index,
                 new_start=new_start,
                 new_end=new_end,
@@ -1867,7 +1879,7 @@ def main() -> None:
                 principal,
                 start_dt,
                 end_dt,
-                args.calendar,
+                selected_calendar,
                 args.title,
             )
 
@@ -1890,7 +1902,7 @@ def main() -> None:
             to_date = date.fromisoformat(args.to_date) if args.to_date else today
             start_dt = datetime.combine(from_date, time.min, tzinfo=tz)
             end_dt = datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=tz)
-            contacts = collect_contacts(principal, start_dt, end_dt, args.calendar)
+            contacts = collect_contacts(principal, start_dt, end_dt, selected_calendar)
 
             if not contacts:
                 safe_print("No attendee contacts found.")
@@ -1920,7 +1932,7 @@ def main() -> None:
                 principal,
                 start_dt,
                 end_dt,
-                args.calendar,
+                selected_calendar,
             )
 
             safe_print(f"Period: {from_date:%Y-%m-%d} - {to_date:%Y-%m-%d}")
@@ -1958,17 +1970,17 @@ def main() -> None:
                 principal,
                 start_dt,
                 end_dt,
-                args.calendar,
+                selected_calendar,
                 max(args.limit, 1),
             )
             return
 
         if args.command == "today":
             target_date = datetime.now(tz).date()
-            calendar_name = args.calendar
+            calendar_name = selected_calendar
         else:
             target_date = date.fromisoformat(args.date)
-            calendar_name = args.calendar
+            calendar_name = selected_calendar
 
         start_dt = datetime.combine(target_date, time.min, tzinfo=tz)
         end_dt = start_dt + timedelta(days=1)
