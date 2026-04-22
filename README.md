@@ -109,7 +109,7 @@ YANDEX_360_ORG_ID=
 - `yandex_calendar.py` - основной CLI.
 - `contacts.json` - локальные алиасы участников.
 - `rooms.json` - переговорки и resource email.
-- `calendar_settings.json` - приоритет переговорок, маленькие комнаты и слова для поиска room resources.
+- `calendar_settings.json` - календарь по умолчанию, приоритет переговорок, маленькие комнаты и слова для поиска room resources.
 - `work_calendar.json` - рабочее время 10:00-19:00 UTC+3, выходные и исключения производственного календаря РФ.
 - `.env` - можно хранить локально в этой папке, но по умолчанию используется общий `../.env`.
 
@@ -150,7 +150,17 @@ Copy-Item .\calendar\contacts.example.json .\calendar\contacts.json
 }
 ```
 
-Переговорки лежат в `rooms.json`, а порядок выбора и маленькие комнаты - в `calendar_settings.json`.
+Переговорки лежат в `rooms.json`, а календарь по умолчанию, порядок выбора переговорок и маленькие комнаты - в `calendar_settings.json`.
+
+Минимальная важная настройка:
+
+```json
+{
+  "default_calendar": "Мои события"
+}
+```
+
+Если `default_calendar` задан, команды просмотра, создания, подбора и обновления встреч будут использовать этот календарь, когда `--calendar` не указан. Это защищает от случайного чтения всех доступных календарей.
 
 Опционально для поиска сотрудников в Yandex 360 Directory:
 
@@ -170,19 +180,19 @@ python .\calendar\yandex_calendar.py calendars
 События на день:
 
 ```powershell
-python .\calendar\yandex_calendar.py day --date 2026-04-22 --calendar "Мои события"
+python .\calendar\yandex_calendar.py day --date 2026-04-22
 ```
 
 Создать встречу с Telemost по умолчанию:
 
 ```powershell
-python .\calendar\yandex_calendar.py create --title "Демо" --start 2026-04-22T14:00 --end 2026-04-22T15:00 --calendar "Мои события" --attendee "Alex Example"
+python .\calendar\yandex_calendar.py create --title "Демо" --start 2026-04-22T14:00 --end 2026-04-22T15:00 --attendee "Alex Example"
 ```
 
 Создать без переговорки:
 
 ```powershell
-python .\calendar\yandex_calendar.py create --title "Демо" --start 2026-04-22T14:00 --end 2026-04-22T15:00 --calendar "Мои события" --no-room
+python .\calendar\yandex_calendar.py create --title "Демо" --start 2026-04-22T14:00 --end 2026-04-22T15:00 --no-room
 ```
 
 Проверить сборку события без подключения к Яндексу:
@@ -201,6 +211,12 @@ python .\calendar\yandex_calendar.py suggest --duration 60 --attendee "Alex Exam
 
 ```powershell
 python .\calendar\yandex_calendar.py suggest --duration 60 --attendee "Alex Example" --date 2026-04-22 --require-room
+```
+
+Переопределить календарь для одной команды:
+
+```powershell
+python .\calendar\yandex_calendar.py day --date 2026-04-22 --calendar "Team Calendar"
 ```
 
 Перенести одиночную встречу:
@@ -223,6 +239,7 @@ python .\calendar\yandex_calendar.py delete --title "Тестовая встре
 
 ## Правила
 
+- Если в `calendar_settings.json` задан `default_calendar`, он используется по умолчанию вместо чтения всех доступных календарей.
 - Telemost при создании добавляется через `X-TELEMOST-REQUIRED:TRUE`.
 - При обновлении существующей встречи Telemost-поля не пересоздаются и не удаляются.
 - Повторяющиеся встречи пока не обновляются: команда `update` явно блокирует recurring-события.
