@@ -1,6 +1,6 @@
 {
+  "default_calendar": "My Events",
   "room_priority": ["main-room", "focus-room", "small-room"],
   "small_rooms": ["small-room"],
   "room_signal_words": ["meeting", "room", "conference", "resource"]
 }
-
