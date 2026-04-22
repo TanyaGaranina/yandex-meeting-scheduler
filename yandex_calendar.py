@@ -998,6 +998,17 @@ def build_client() -> caldav.DAVClient:
     )
 
 
+def organizer_from_env(require_login: bool = True) -> dict[str, str]:
+    login = optional_env("YANDEX_LOGIN")
+    if require_login and not login:
+        login = require_env("YANDEX_LOGIN")
+    fallback_email = login or "organizer@example.com"
+    return {
+        "name": optional_env("YANDEX_ORGANIZER_NAME") or fallback_email.split("@")[0],
+        "email": fallback_email,
+    }
+
+
 def get_timezone() -> ZoneInfo:
     tz_name = os.getenv("YANDEX_TIMEZONE", "Europe/Moscow").strip() or "Europe/Moscow"
     return ZoneInfo(tz_name)
@@ -1678,10 +1689,42 @@ def build_ics(
     return "\r\n".join(lines) + "\r\n"
 
 
+def dry_run_create_without_caldav(args, tz: ZoneInfo) -> bool:
+    if args.command != "create" or not args.dry_run:
+        return False
+    if args.attendee:
+        return False
+    if not args.no_room and not args.room:
+        return False
+
+    load_env_files()
+    start_dt = parse_local_datetime(args.start, tz)
+    end_dt = parse_local_datetime(args.end, tz)
+    if end_dt <= start_dt:
+        raise SystemExit("--end must be later than --start.")
+
+    event_payload = build_ics(
+        title=args.title,
+        start_dt=start_dt,
+        end_dt=end_dt,
+        description=args.description,
+        location=args.location,
+        attendees=[],
+        room=resolve_room(args.room),
+        organizer=organizer_from_env(require_login=False),
+        telemost_required=not args.no_telemost,
+    )
+    safe_print(event_payload)
+    return True
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     tz = get_timezone()
+
+    if dry_run_create_without_caldav(args, tz):
+        return
 
     with build_client() as client:
         principal = client.principal()
@@ -1720,11 +1763,7 @@ def main() -> None:
                         + ". Use --no-room to create without a room."
                     )
             calendar = get_calendar(principal, args.calendar)
-            organizer = {
-                "name": optional_env("YANDEX_ORGANIZER_NAME")
-                or (optional_env("YANDEX_LOGIN") or require_env("YANDEX_LOGIN")).split("@")[0],
-                "email": optional_env("YANDEX_LOGIN") or require_env("YANDEX_LOGIN"),
-            }
+            organizer = organizer_from_env()
             event_payload = build_ics(
                 title=args.title,
                 start_dt=start_dt,
